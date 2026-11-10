@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 function Mark() {
   return (
-    <svg viewBox="0 0 32 32" className="size-9 shrink-0" aria-hidden>
+    <svg viewBox="0 0 32 32" width="36" height="36" className="brand-mark size-9 shrink-0" aria-hidden>
       <rect width="32" height="32" rx="6" fill="var(--color-ink)" />
       <g fill="var(--color-canvas)">
         <rect x="7" y="6" width="18" height="4" />
