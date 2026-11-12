@@ -29,6 +29,48 @@ function statusCopy(status: string, loaded: number, total: number) {
   return "Opening Deriv";
 }
 
+type InstallEvent = Event & { prompt: () => Promise<void> };
+
+function useInstallPrompt() {
+  const [event, setEvent] = useState<InstallEvent | null>(null);
+  const [installed, setInstalled] = useState(false);
+  const [hint, setHint] = useState("");
+
+  useEffect(() => {
+    if (window.matchMedia("(display-mode: standalone)").matches) setInstalled(true);
+    const onPrompt = (next: Event) => {
+      next.preventDefault();
+      setEvent(next as InstallEvent);
+    };
+    const onDone = () => setInstalled(true);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onDone);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onDone);
+    };
+  }, []);
+
+  const phone = typeof navigator !== "undefined" && /Android|iPhone|iPad/i.test(navigator.userAgent);
+
+  return {
+    ready: !installed && (event !== null || phone),
+    hint,
+    run: async () => {
+      if (event) {
+        await event.prompt();
+        setEvent(null);
+        return;
+      }
+      setHint(
+        /iPhone|iPad/i.test(navigator.userAgent)
+          ? "In Safari, tap Share, then Add to Home Screen. The desk still reads Deriv."
+          : "In Chrome, open the menu and tap Install app. The desk still reads Deriv.",
+      );
+    },
+  };
+}
+
 export function DeskApp() {
   const view = usePrefs((state) => state.view);
   const setView = usePrefs((state) => state.setView);
@@ -36,6 +78,7 @@ export function DeskApp() {
   const loaded = useLive((state) => state.loaded);
   const total = useLive((state) => state.total);
   const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
+  const install = useInstallPrompt();
 
   return (
     <div className="term min-h-dvh text-ink">
@@ -73,6 +116,11 @@ export function DeskApp() {
             <a className="menu-btn shrink-0" href={LINKS.whatsapp} target="_blank" rel="noreferrer noopener">
               WhatsApp
             </a>
+            {install.ready ? (
+              <button type="button" className="menu-btn shrink-0" onClick={() => install.run()}>
+                Install
+              </button>
+            ) : null}
             <button
               type="button"
               className={cn("menu-btn shrink-0", view === "signals" && "primary")}
@@ -88,6 +136,7 @@ export function DeskApp() {
               Tools
             </button>
           </div>
+          {install.hint ? <p className="text-xs font-extrabold text-mist">{install.hint}</p> : null}
         </div>
       </header>
       <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 py-4 lg:px-6">
