@@ -556,6 +556,12 @@ export function retryFeed() {
   connect();
 }
 
+export function chartCandles(symbol: string): Candle[] {
+  const candles = books.get(symbol);
+  if (!candles || candles.length === 0) return [];
+  return candles.slice(-140);
+}
+
 export function chartSeries(symbol: string): ChartPoint[] {
   const candles = books.get(symbol);
   if (!candles || candles.length === 0) return [];
