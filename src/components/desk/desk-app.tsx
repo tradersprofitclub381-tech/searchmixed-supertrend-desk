@@ -1,8 +1,6 @@
-import { ArrowUpRight } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SignalBoard } from "@/components/desk/signal-board";
 import { ToolsView } from "@/components/desk/tools-view";
-import { Button } from "@/components/ui/button";
 import { useLive, usePrefs } from "@/lib/desk-store";
 import { LINKS } from "@/lib/links";
 import { ATR_MULTIPLIERS, ATR_PERIODS, MARKETS, TIMEFRAMES, type MarketName } from "@/lib/signal";
@@ -40,18 +38,18 @@ export function DeskApp() {
   const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
+    <div className="term min-h-dvh text-ink">
       <header className="border-b border-line">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 py-4 lg:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-2 px-4 py-3 lg:px-6">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <Mark />
               <div>
-                <h1 className="font-display text-3xl leading-none tracking-tight">Searchmixed</h1>
-                <p className="mt-1 text-sm text-mist">Supertrend desk</p>
+                <h1 className="text-2xl leading-none font-extrabold tracking-tight">Searchmixed</h1>
+                <p className="mt-1 text-xs font-extrabold tracking-wide text-mist uppercase">Supertrend desk</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-sm text-mist" aria-live="polite">
+            <div className="flex items-center gap-2 text-xs font-extrabold tracking-wide text-mist" aria-live="polite">
               <span
                 className={cn(
                   "size-2 rounded-full",
@@ -62,50 +60,29 @@ export function DeskApp() {
               {statusCopy(status, loaded, total)}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            <Button asChild className="w-full sm:order-last sm:w-auto">
-              <a href={LINKS.signup} target="_blank" rel="noreferrer noopener">
-                Sign up
-                <ArrowUpRight className="size-4" aria-hidden />
-              </a>
-            </Button>
-            <Button asChild variant="line" className="w-full sm:w-auto">
-              <a href={LINKS.signup} target="_blank" rel="noreferrer noopener">
-                Log in
-              </a>
-            </Button>
-            <Button asChild variant="line" className="w-full sm:w-auto">
-              <a href={LINKS.vps} target="_blank" rel="noreferrer noopener">
-                Buy VPS
-              </a>
-            </Button>
-            <Button asChild variant="line" className="w-full sm:w-auto">
-              <a href={LINKS.whatsapp} target="_blank" rel="noreferrer noopener">
-                WhatsApp
-              </a>
-            </Button>
-          </div>
-          <div className="flex gap-2" role="tablist" aria-label="Sections">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <a className="menu-btn primary shrink-0" href={LINKS.signup} target="_blank" rel="noreferrer noopener">
+              Sign up
+            </a>
+            <a className="menu-btn shrink-0" href={LINKS.signup} target="_blank" rel="noreferrer noopener">
+              Log in
+            </a>
+            <a className="menu-btn shrink-0" href={LINKS.vps} target="_blank" rel="noreferrer noopener">
+              Buy VPS
+            </a>
+            <a className="menu-btn shrink-0" href={LINKS.whatsapp} target="_blank" rel="noreferrer noopener">
+              WhatsApp
+            </a>
             <button
               type="button"
-              role="tab"
-              aria-selected={view === "signals"}
-              className={cn(
-                "h-11 rounded-full px-4 text-sm font-medium transition-colors duration-150",
-                view === "signals" ? "bg-paper text-ink-btn" : "text-mist hover:bg-panel hover:text-ink",
-              )}
+              className={cn("menu-btn shrink-0", view === "signals" && "primary")}
               onClick={() => setView("signals")}
             >
               Signals
             </button>
             <button
               type="button"
-              role="tab"
-              aria-selected={view === "tools"}
-              className={cn(
-                "h-11 rounded-full px-4 text-sm font-medium transition-colors duration-150",
-                view === "tools" ? "bg-paper text-ink-btn" : "text-mist hover:bg-panel hover:text-ink",
-              )}
+              className={cn("menu-btn shrink-0", view === "tools" && "primary")}
               onClick={() => setView("tools")}
             >
               Tools
@@ -116,7 +93,7 @@ export function DeskApp() {
       <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 py-4 lg:px-6">
         {view === "signals" ? (
           <>
-            <p className="max-w-3xl text-sm text-mist">
+            <p className="hidden max-w-3xl text-sm text-mist lg:block">
               A Supertrend flip opens the signal. The stop starts on the band. TP1 is 1.5R and TP2 is 2.5R. Price stays live from Deriv.
             </p>
             <Filters />
@@ -184,16 +161,13 @@ function Filters() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Timeframe">
+        <div className="flex gap-1 overflow-x-auto" role="group" aria-label="Timeframe">
           {TIMEFRAMES.map((item) => (
             <button
               key={item.id}
               type="button"
               aria-pressed={timeframe === item.id}
-              className={cn(
-                "h-11 min-w-11 rounded-full px-3 text-sm transition-colors duration-150",
-                timeframe === item.id ? "bg-paper text-ink-btn" : "bg-panel text-mist hover:text-ink",
-              )}
+              className={cn("tf-chip", timeframe === item.id && "on")}
               onClick={() => setTimeframe(item.id)}
             >
               {item.label}
@@ -258,7 +232,7 @@ function Filters() {
           placeholder="Search symbol"
           className="h-11 w-full rounded-full border border-line bg-panel px-4 text-base text-ink outline-none placeholder:text-faint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-paper lg:max-w-xs"
         />
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Market">
+        <div className="flex gap-1 overflow-x-auto" role="group" aria-label="Market">
           {MARKETS.map((item) => (
             <FilterChip key={item} pressed={market === item} onClick={() => setMarket(item as "All" | MarketName)}>
               {item}
@@ -267,7 +241,7 @@ function Filters() {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1" role="group" aria-label="Bias">
+        <div className="flex gap-1 rounded-2xl border border-line bg-white/3 p-1" role="group" aria-label="Bias">
           {(
             [
               ["all", "All"],
@@ -316,8 +290,8 @@ function FilterChip({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        "h-11 rounded-full px-3 text-sm transition-colors duration-150",
-        pressed ? "bg-paper text-ink-btn" : "bg-panel text-mist hover:text-ink",
+        "h-10 flex-1 rounded-xl px-3 text-sm font-extrabold",
+        pressed ? "bg-panel-2 text-ink" : "text-mist",
       )}
     >
       {children}
