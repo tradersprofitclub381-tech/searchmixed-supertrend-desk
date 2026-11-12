@@ -1,11 +1,12 @@
 import { Star } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { PriceChart } from "@/components/desk/price-chart";
+import { useEffect, useMemo, useState } from "react";
+import { CandleChart } from "@/components/desk/candle-chart";
 import { Button } from "@/components/ui/button";
-import { chartSeries, retryFeed } from "@/lib/deriv-engine";
+import { retryFeed } from "@/lib/deriv-engine";
 import { useLive, usePrefs } from "@/lib/desk-store";
-import { formatAge, formatClock, formatPips, formatPrice, pipsBetween } from "@/lib/format";
-import type { Direction, Phase, Quote } from "@/lib/signal";
+import { formatAge, formatPrice } from "@/lib/format";
+import type { Phase, Quote } from "@/lib/signal";
+import { TIMEFRAMES } from "@/lib/signal";
 import { cn } from "@/lib/utils";
 
 function useNow(interval = 15000) {
@@ -15,18 +16,6 @@ function useNow(interval = 15000) {
     return () => window.clearInterval(id);
   }, [interval]);
   return now;
-}
-
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReduced(media.matches);
-    apply();
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, []);
-  return reduced;
 }
 
 function useVisible() {
@@ -70,20 +59,6 @@ function useVisible() {
   }, [order, metas, directions, epochs, query, market, bias, followingOnly, sort, follows]);
 }
 
-function Bias({ direction }: { direction: Direction }) {
-  const buy = direction === "buy";
-  return (
-    <span
-      className={cn(
-        "inline-flex h-7 items-center rounded-full px-2.5 text-xs font-medium",
-        buy ? "bg-rise-soft text-rise" : "bg-fall-soft text-fall",
-      )}
-    >
-      {buy ? "Buy" : "Sell"}
-    </span>
-  );
-}
-
 function phaseLabel(phase: Phase) {
   if (phase === "tp1") return "TP1 hit";
   if (phase === "tp2") return "TP2 hit";
@@ -96,7 +71,7 @@ function FollowButton({ symbol }: { symbol: string }) {
   return (
     <button
       type="button"
-      className="inline-flex size-11 items-center justify-center rounded-full text-ink transition-colors duration-150 hover:bg-canvas"
+      className="inline-flex size-9 items-center justify-center rounded-full text-ink"
       aria-pressed={followed}
       aria-label={followed ? `Unfollow ${symbol}` : `Follow ${symbol}`}
       onClick={(event) => {
@@ -109,114 +84,60 @@ function FollowButton({ symbol }: { symbol: string }) {
   );
 }
 
-const SignalRow = memo(function SignalRow({
-  symbol,
-  now,
-  onOpen,
-}: {
-  symbol: string;
-  now: number;
-  onOpen: (symbol: string) => void;
-}) {
-  const quote = useLive((state) => state.quotes[symbol]);
-  const selected = useLive((state) => state.selected === symbol);
-  const reduced = useReducedMotion();
-  const flashTimer = useRef<number | null>(null);
-  const previous = useRef<number | null>(null);
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-
-  useEffect(() => {
-    if (!quote) return;
-    const last = previous.current;
-    previous.current = quote.price;
-    if (reduced || last === null || last === quote.price) return;
-    setFlash(quote.price > last ? "up" : "down");
-    if (flashTimer.current) window.clearTimeout(flashTimer.current);
-    flashTimer.current = window.setTimeout(() => setFlash(null), 450);
-  }, [quote, reduced]);
-
-  useEffect(() => {
-    return () => {
-      if (flashTimer.current) window.clearTimeout(flashTimer.current);
-    };
-  }, []);
-
-  if (!quote) return null;
-  const pips = pipsBetween(quote.entry, quote.price, quote.pip, quote.direction);
-
-  return (
-    <tr
-      className={cn(
-        "cursor-pointer border-b border-line border-l-2 transition-colors duration-150",
-        selected ? "border-l-paper bg-panel-2" : "border-l-transparent hover:bg-panel",
-        flash === "up" && "bg-rise-soft",
-        flash === "down" && "bg-fall-soft",
-      )}
-      onClick={() => onOpen(symbol)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen(symbol);
-        }
-      }}
-      tabIndex={0}
-    >
-      <td className="px-3 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-medium">{quote.displayName}</div>
-            <div className="text-xs text-faint">{quote.market}</div>
-          </div>
-          <FollowButton symbol={symbol} />
-        </div>
-      </td>
-      <td className="px-3 py-3">
-        <Bias direction={quote.direction} />
-      </td>
-      <td className="px-3 py-3">
-        <div className="tabular-nums">{formatPrice(quote.price, quote.digits)}</div>
-        <div className={cn("text-xs tabular-nums", pips >= 0 ? "text-rise" : "text-fall")}>
-          {formatPips(pips)} pips
-        </div>
-      </td>
-      <td className="px-3 py-3 tabular-nums text-mist">{formatPrice(quote.entry, quote.digits)}</td>
-      <td className="px-3 py-3 tabular-nums text-mist">{formatPrice(quote.sl, quote.digits)}</td>
-      <td className="px-3 py-3 tabular-nums">{formatPrice(quote.tp1, quote.digits)}</td>
-      <td className="px-3 py-3 tabular-nums">{formatPrice(quote.tp2, quote.digits)}</td>
-      <td className="px-3 py-3 text-mist">{formatAge(quote.signalEpoch, now)}</td>
-    </tr>
-  );
-});
-
 function SignalCard({ symbol, now, onOpen }: { symbol: string; now: number; onOpen: (symbol: string) => void }) {
   const quote = useLive((state) => state.quotes[symbol]);
+  const timeframe = usePrefs((state) => state.timeframe);
   if (!quote) return null;
+  const reward = Math.abs(quote.tp2 - quote.entry);
+  const risk = Math.abs(quote.entry - quote.sl);
+  const rr = risk > 0 ? reward / risk : 0;
+  const riskW = rr > 0 ? 100 / (1 + rr) : 50;
+  const frame = TIMEFRAMES.find((item) => item.id === timeframe)?.label ?? "";
   return (
-    <article className="rounded-xl border border-line bg-panel p-4">
+    <div className="sig-card" data-side={quote.direction}>
       <button type="button" className="w-full text-left" onClick={() => onOpen(symbol)}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="font-medium">{quote.displayName}</div>
-            <div className="text-xs text-faint">
-              {quote.market} · {formatAge(quote.signalEpoch, now)}
-            </div>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[15px] font-extrabold">
+            {quote.displayName}
+            <small className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-mist">
+              {frame}
+            </small>
           </div>
-          <Bias direction={quote.direction} />
+          <span className="side-pill">{quote.direction === "buy" ? "BUY" : "SELL"}</span>
         </div>
-        <div className="mt-3 font-display text-3xl tracking-tight tabular-nums">
-          {formatPrice(quote.price, quote.digits)}
+        <div className="grid grid-cols-4 gap-2">
+          <div className="flex min-w-0 flex-col gap-1">
+            <small className="text-[9px] font-extrabold tracking-widest text-mist uppercase">Entry</small>
+            <b className="text-[12.5px] font-extrabold tabular-nums">{formatPrice(quote.entry, quote.digits)}</b>
+          </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <small className="text-[9px] font-extrabold tracking-widest text-mist uppercase">Stop</small>
+            <b className="text-[12.5px] font-extrabold text-fall tabular-nums">{formatPrice(quote.sl, quote.digits)}</b>
+          </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <small className="text-[9px] font-extrabold tracking-widest text-mist uppercase">Target</small>
+            <b className="text-[12.5px] font-extrabold text-rise tabular-nums">{formatPrice(quote.tp2, quote.digits)}</b>
+          </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <small className="text-[9px] font-extrabold tracking-widest text-mist uppercase">R:R</small>
+            <b className="text-[12.5px] font-extrabold tabular-nums">1:{rr.toFixed(1)}</b>
+          </div>
         </div>
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <Stat label="Entry" value={formatPrice(quote.entry, quote.digits)} />
-          <Stat label="Stop" value={formatPrice(quote.sl, quote.digits)} />
-          <Stat label="TP1" value={formatPrice(quote.tp1, quote.digits)} />
-          <Stat label="TP2" value={formatPrice(quote.tp2, quote.digits)} />
-        </dl>
+        <div className="rr-bar" aria-hidden>
+          <i className="risk" style={{ width: `${riskW}%` }} />
+          <i className="rew" style={{ width: `${100 - riskW}%` }} />
+        </div>
       </button>
-      <div className="mt-2 flex justify-end">
-        <FollowButton symbol={symbol} />
+      <div className="mt-3 flex items-center justify-between text-[10px] font-extrabold tracking-wide text-mist">
+        <span>{formatAge(quote.signalEpoch, now)} ago</span>
+        <span className="flex items-center gap-1">
+          <button type="button" className="text-accent" onClick={() => onOpen(symbol)}>
+            Chart ›
+          </button>
+          <FollowButton symbol={symbol} />
+        </span>
       </div>
-    </article>
+    </div>
   );
 }
 
@@ -234,14 +155,26 @@ function Detail({ onBack }: { onBack: () => void }) {
   const selected = useLive((state) => state.selected);
   const quote = useLive((state) => (selected ? state.quotes[selected] : undefined));
   const now = useNow();
-  const series = quote ? chartSeries(quote.symbol) : [];
 
   return (
-    <aside className="rounded-xl border border-line bg-panel p-4 lg:sticky lg:top-4">
-      <button type="button" className="mb-3 text-sm text-mist lg:hidden" onClick={onBack}>
-        Back to signals
-      </button>
-      {quote ? <DetailBody quote={quote} now={now} series={series} /> : <DetailEmpty />}
+    <aside className="chart-screen rounded-2xl border border-line bg-panel lg:sticky lg:top-4 lg:block">
+      <div className="flex items-center gap-3 px-4 pt-4">
+        <button type="button" className="menu-btn size-9 px-0 lg:hidden" onClick={onBack} aria-label="Back">
+          ‹
+        </button>
+        <div className="min-w-0">
+          <b className="block truncate text-[15px]">{quote ? quote.displayName : "Chart"}</b>
+          <small className="text-[10px] font-extrabold tracking-wide text-mist">
+            {quote ? `${quote.market} · Deriv candles` : "Select a signal"}
+          </small>
+        </div>
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-rise/15 px-2.5 py-1.5 text-[10px] font-black tracking-widest text-rise">
+          <i className="live-dot" /> LIVE
+        </span>
+      </div>
+      <div className="p-3">
+        {quote ? <DetailBody quote={quote} now={now} /> : <DetailEmpty />}
+      </div>
     </aside>
   );
 }
@@ -257,57 +190,35 @@ function DetailEmpty() {
   );
 }
 
-function DetailBody({
-  quote,
-  now,
-  series,
-}: {
-  quote: Quote;
-  now: number;
-  series: ReturnType<typeof chartSeries>;
-}) {
-  const pips = pipsBetween(quote.entry, quote.price, quote.pip, quote.direction);
+function DetailBody({ quote, now }: { quote: Quote; now: number }) {
   const risk = Math.abs(quote.entry - quote.sl);
-  const stopPips = risk / quote.pip;
-  const sentence =
-    quote.direction === "buy"
-      ? "Buy bias while price holds above the band. The trail is the live Supertrend."
-      : "Sell bias while price holds below the band. The trail is the live Supertrend.";
-
+  const reward = Math.abs(quote.tp2 - quote.entry);
+  const rr = risk > 0 ? reward / risk : 0;
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs tracking-wide text-faint uppercase">{quote.market}</div>
-          <h2 className="font-display text-3xl tracking-tight">{quote.displayName}</h2>
-          <p className="mt-1 text-sm text-mist">
-            {phaseLabel(quote.phase)} · {formatAge(quote.signalEpoch, now)} · {formatClock(quote.signalEpoch)}
-          </p>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <span className="side-pill" data-side={quote.direction} style={{ color: quote.direction === "buy" ? "#22d18b" : "#ff5b6a", background: quote.direction === "buy" ? "rgba(34,209,139,.16)" : "rgba(255,91,106,.16)" }}>
+          {quote.direction.toUpperCase()}
+        </span>
+        <span className="rounded-md border border-line px-2 py-1 text-[10px] font-extrabold text-mist">R:R 1:{rr.toFixed(1)}</span>
+        <span className="ml-auto text-[10px] font-extrabold text-mist">{formatAge(quote.signalEpoch, now)} ago</span>
+        <FollowButton symbol={quote.symbol} />
+      </div>
+      <CandleChart quote={quote} />
+      <div className="rounded-2xl border border-line bg-panel p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <b className="text-[13px]">Trade plan</b>
+          <span className="rounded-full bg-accent/15 px-2 py-1 text-[9px] font-black tracking-widest text-accent">
+            {phaseLabel(quote.phase).toUpperCase()}
+          </span>
         </div>
-        <div className="flex items-center gap-2">
-          <Bias direction={quote.direction} />
-          <FollowButton symbol={quote.symbol} />
+        <div className="grid grid-cols-2 gap-2">
+          <Stat label="Entry" value={formatPrice(quote.entry, quote.digits)} />
+          <Stat label="Stop loss" value={formatPrice(quote.sl, quote.digits)} />
+          <Stat label="TP1 · 1.5R" value={formatPrice(quote.tp1, quote.digits)} />
+          <Stat label="TP2 · 2.5R" value={formatPrice(quote.tp2, quote.digits)} />
         </div>
       </div>
-      <div>
-        <div className="font-display text-4xl tracking-tight tabular-nums">
-          {formatPrice(quote.price, quote.digits)}
-        </div>
-        <p className={cn("mt-1 text-sm tabular-nums", pips >= 0 ? "text-rise" : "text-fall")}>
-          {formatPips(pips)} pips from entry
-        </p>
-      </div>
-      <PriceChart points={series} digits={quote.digits} />
-      <p className="text-xs text-faint">Price in ink. Rising band in green. Falling band in red.</p>
-      <dl className="grid grid-cols-2 gap-3">
-        <Stat label="Entry" value={formatPrice(quote.entry, quote.digits)} hint="Close of the flip" />
-        <Stat label="Stop" value={formatPrice(quote.sl, quote.digits)} hint={`${stopPips.toFixed(1)} pips risk`} />
-        <Stat label="Trail" value={formatPrice(quote.trail, quote.digits)} hint="Live Supertrend" />
-        <Stat label="ATR" value={formatPrice(quote.atr, quote.digits)} />
-        <Stat label="TP1" value={formatPrice(quote.tp1, quote.digits)} hint="1.5R" />
-        <Stat label="TP2" value={formatPrice(quote.tp2, quote.digits)} hint="2.5R" />
-      </dl>
-      <p className="text-sm text-mist">{sentence} Follows stay on this device.</p>
     </div>
   );
 }
@@ -325,59 +236,32 @@ export function SignalBoard({
   const status = useLive((state) => state.status);
   const error = useLive((state) => state.error);
   const loaded = useLive((state) => state.loaded);
-  const total = useLive((state) => state.total);
-  const universe = useLive((state) => state.universe);
   const now = useNow();
   const waiting = loaded === 0 && status !== "offline";
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.8fr)]">
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(280px,420px)_minmax(0,1fr)]">
       <section className={cn("min-w-0", mobilePane === "detail" ? "hidden lg:block" : "block")}>
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 text-sm text-mist">
+        <div className="mb-3 flex items-center justify-between px-1 text-[11px] font-extrabold tracking-wide text-mist">
           <p>
-            {symbols.length} on screen
+            {symbols.length} signal{symbols.length === 1 ? "" : "s"}
             {loaded > 0 ? ` · ${buys} buy · ${sells} sell` : ""}
           </p>
-          <p>
-            {loaded > 0 ? `${loaded} live` : "Waiting"}
-            {universe > total && total > 0 ? ` · ${total} of ${universe}` : ""}
-          </p>
+          <p>{loaded > 0 ? `${loaded} live` : "Waiting"}</p>
         </div>
         {waiting ? <SkeletonList /> : null}
         {!waiting && symbols.length === 0 ? (
           <EmptyBoard status={status} error={error} loaded={loaded} />
         ) : null}
         {symbols.length > 0 ? (
-          <>
-            <div className="hidden overflow-hidden rounded-xl border border-line bg-panel md:block">
-              <div className="max-h-[70vh] overflow-auto">
-                <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-                  <thead className="sticky top-0 bg-panel text-xs tracking-wide text-faint uppercase">
-                    <tr>
-                      {["Market", "Signal", "Price", "Entry", "Stop", "TP1", "TP2", "Age"].map((label) => (
-                        <th key={label} className="px-3 py-3 font-medium">
-                          {label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {symbols.map((symbol) => (
-                      <SignalRow key={symbol} symbol={symbol} now={now} onOpen={onOpen} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div className="flex flex-col gap-3 md:hidden">
-              {symbols.map((symbol) => (
-                <SignalCard key={symbol} symbol={symbol} now={now} onOpen={onOpen} />
-              ))}
-            </div>
-          </>
+          <div className="flex flex-col gap-2.5 lg:max-h-[calc(100dvh-220px)] lg:overflow-auto lg:pr-1">
+            {symbols.map((symbol) => (
+              <SignalCard key={symbol} symbol={symbol} now={now} onOpen={onOpen} />
+            ))}
+          </div>
         ) : null}
       </section>
-      <div className={cn(mobilePane === "list" ? "hidden lg:block" : "block")}>
+      <div className={cn(mobilePane === "list" ? "hidden lg:block" : "chart-screen is-open lg:static")}>
         <Detail onBack={onBack} />
       </div>
     </div>
